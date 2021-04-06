@@ -1,4 +1,5 @@
 ﻿using Basket.API.Entities;
+using Basket.API.GrpcServices;
 using Basket.API.Repositories;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,10 +13,12 @@ namespace Basket.API.Controllers
     public class BasketController : ControllerBase
     {
         private readonly IBasketRepository _repository;
+        private readonly DiscountGrpcService _discountGrpcService;
 
-        public BasketController(IBasketRepository repository)
+        public BasketController(IBasketRepository repository, DiscountGrpcService discountGrpcService)
         {
             _repository = repository;
+            _discountGrpcService = discountGrpcService;
         }
         
         [HttpGet("{userName}", Name = "GetBasket")]
@@ -38,6 +41,16 @@ namespace Basket.API.Controllers
             if (string.IsNullOrWhiteSpace(basket.UserName))
                 return BadRequest($"Username is required.");
 
+            //consume the grpc discount service to get the discount on the items
+            if(basket.Items != null)
+            {
+                foreach(var item in basket.Items)
+                {
+                    //get the discount info using the grpc service
+                    var coupon = await _discountGrpcService.GetDiscount(item.ProductName);
+                    item.Price -= coupon.Amount;
+                }
+            }
             var updatedBasket = await _repository.UpdateBasket(basket);
             return Ok(updatedBasket);
         }
